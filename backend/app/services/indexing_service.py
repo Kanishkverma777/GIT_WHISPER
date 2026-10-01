@@ -33,14 +33,24 @@ _IGNORED_EXTENSIONS = {
 
 
 def _should_index(file_path: str) -> bool:
-    if "package-lock.json" in file_path.lower() or "yarn.lock" in file_path.lower():
+    fp_lower = file_path.lower()
+    
+    # Ignore build/dependency folders
+    if any(x in fp_lower for x in ["node_modules/", "dist/", "build/", ".next/", "__pycache__/"]):
         return False
+        
+    # Ignore specific lock files or generated minified files
+    if "package-lock.json" in fp_lower or "yarn.lock" in fp_lower or ".min.js" in fp_lower or ".min.css" in fp_lower:
+        return False
+        
     dot = file_path.rfind(".")
     if dot == -1:
         return False
+        
     ext = file_path[dot:].lower()
     if ext in _IGNORED_EXTENSIONS:
         return False
+        
     return ext in _ALLOWED_EXTENSIONS
 
 
