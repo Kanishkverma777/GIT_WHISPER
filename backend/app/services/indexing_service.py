@@ -177,21 +177,28 @@ async def index_repository(repo_id: str, access_token: str) -> None:
                             continue
 
                         chunk_texts = [c["content"] for c in chunks]
-                        embeddings = await vector_service.get_embeddings_batch(chunk_texts)
+                        
+                        # Process embeddings in batches of 32 to prevent OOM
+                        BATCH_SIZE = 32
+                        for i in range(0, len(chunks), BATCH_SIZE):
+                            batch_chunks = chunks[i:i + BATCH_SIZE]
+                            batch_texts = chunk_texts[i:i + BATCH_SIZE]
+                            
+                            batch_embeddings = await vector_service.get_embeddings_batch(batch_texts)
+                            
+                            payload_batch: list[tuple[list[float], dict]] = []
+                            for chunk, embedding in zip(batch_chunks, batch_embeddings):
+                                payload = {
+                                    "repository_id": repo_id,
+                                    "file_path": chunk["file_path"],
+                                    "content": chunk["content"],
+                                    "start_line": chunk["start_line"],
+                                    "end_line": chunk["end_line"],
+                                    "language": chunk["language"],
+                                }
+                                payload_batch.append((embedding, payload))
 
-                        batch: list[tuple[list[float], dict]] = []
-                        for chunk, embedding in zip(chunks, embeddings):
-                            payload = {
-                                "repository_id": repo_id,
-                                "file_path": chunk["file_path"],
-                                "content": chunk["content"],
-                                "start_line": chunk["start_line"],
-                                "end_line": chunk["end_line"],
-                                "language": chunk["language"],
-                            }
-                            batch.append((embedding, payload))
-
-                        await vector_service.upsert_points_batch(batch)
+                            await vector_service.upsert_points_batch(payload_batch)
                         total_chunks += len(chunks)
                         files_processed += 1
 

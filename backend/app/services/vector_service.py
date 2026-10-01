@@ -97,7 +97,8 @@ async def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
     """Batch-embed multiple texts at once (much faster than one-by-one)."""
     def _embed_batch() -> list[list[float]]:
         model = _get_embedder()
-        vectors = list(model.embed(texts))
+        # Restrict batch_size to 8 to prevent memory spikes (OOM) on 512MB RAM instances
+        vectors = list(model.embed(texts, batch_size=8))
         return [v.tolist() for v in vectors]
 
     return await asyncio.to_thread(_embed_batch)
