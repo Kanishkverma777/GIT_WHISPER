@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -16,6 +17,7 @@ from app.schemas import IndexStatusResponse, RepositoryResponse
 from app.services import github_service, indexing_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ── GET /api/repos ────────────────────────────────────────────────────────────
@@ -108,7 +110,11 @@ async def start_index(
     repo = await _require_ownership(db, repo_id, user.id)
 
     if repo.index_status == "INDEXING":
-        raise HTTPException(status.HTTP_409_CONFLICT, "Indexing is already in progress")
+        # If it's been stuck for more than 10 minutes, allow re-indexing (crash recovery)
+        from datetime import datetime, timezone, timedelta
+        if repo.updated_at and (datetime.now(timezone.utc) - repo.updated_at) < timedelta(minutes=10):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Indexing is already in progress")
+        logger.warning("Repo %s was stuck in INDEXING, allowing re-index", repo_id)
 
     if not user.github_access_token:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "GitHub access token not available")

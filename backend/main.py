@@ -34,6 +34,9 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Ensuring Qdrant collection …")
     await ensure_collection()
+    logger.info("Pre-warming embedding model …")
+    from app.services import vector_service
+    await vector_service.get_embedding("warmup")
     logger.info("GitWhisper backend ready on port %s", settings.port)
     yield
 

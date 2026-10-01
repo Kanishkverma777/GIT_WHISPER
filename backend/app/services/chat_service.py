@@ -68,7 +68,7 @@ async def get_messages(db: AsyncSession, session_id: str) -> list[ChatMessage]:
 
 
 async def get_context_for_query(
-    repository_id: str, query: str, top_k: int = 5
+    repository_id: str, query: str, top_k: int = 8
 ) -> tuple[str, list[dict]]:
     """
     RAG retrieval — embed the query, search Qdrant, return
@@ -80,6 +80,7 @@ async def get_context_for_query(
     top_chunks = [r["payload"] for r in results]
 
     context_text = "\n\n---\n\n".join(
+        f"File: {chunk.get('file_path', 'unknown')}\n"
         f"```{chunk.get('language', '')}\n{chunk['content']}\n```"
         for chunk in top_chunks
     )

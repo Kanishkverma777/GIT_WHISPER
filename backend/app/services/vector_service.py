@@ -20,7 +20,7 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
-from fastembed.embedding import TextEmbedding
+from fastembed import TextEmbedding
 
 from app.config import settings
 

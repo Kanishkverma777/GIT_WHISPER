@@ -21,24 +21,30 @@ def _get_client() -> AsyncGroq:
 def build_system_prompt(repo_full_name: str) -> str:
     """System prompt that grounds the assistant on the repo context."""
     return (
-        f'You are an AI assistant that helps users understand and work with '
-        f'the codebase of the repository "{repo_full_name}".\n\n'
-        f'You will be given relevant code snippets from the repository to answer '
-        f'the user\'s questions. Use the provided code snippets to inform your '
-        f'answers. If the code snippets are not relevant, you can say so and '
-        f'answer based on your general knowledge.\n\n'
-        f'Always be helpful, clear, and concise. If you are unsure about something, say so.'
+        f'You are an expert code assistant for the GitHub repository "{repo_full_name}".\n\n'
+        f'You will receive relevant code snippets from the repository, each labeled with '
+        f'its file path. You MUST use these snippets to answer the user\'s questions.\n\n'
+        f'Rules:\n'
+        f'- Always reference specific file paths when discussing code.\n'
+        f'- If asked about the tech stack, look for package.json, requirements.txt, '
+        f'config files, and import statements in the provided snippets.\n'
+        f'- If the snippets don\'t contain enough info to answer, say so clearly '
+        f'and explain what you CAN see from the provided code.\n'
+        f'- Be helpful, precise, and concise.'
     )
 
 
 def build_user_prompt(context_text: str, user_content: str) -> str:
     """Combine retrieved code context with the user's question."""
     if not context_text.strip():
-        return user_content
+        return (
+            f"No relevant code snippets were found for this question. "
+            f"Please answer based on your general knowledge:\n\n{user_content}"
+        )
     return (
-        f"Here are some relevant code snippets from the repository:\n\n"
+        f"Here are relevant code snippets from the repository:\n\n"
         f"{context_text}\n\n---\n\n"
-        f"Based on the above code snippets, please answer the following question:\n\n"
+        f"Using the code snippets above, answer the following question:\n\n"
         f"{user_content}"
     )
 

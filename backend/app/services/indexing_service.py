@@ -113,21 +113,15 @@ def chunk_code(
 
 
 async def _traverse_repo(
-    access_token: str, owner: str, repo_name: str, path: str = ""
+    access_token: str, owner: str, repo_name: str, branch: str = "HEAD"
 ) -> list[str]:
-    """Recursively list all indexable file paths in a repository."""
-    file_paths: list[str] = []
+    """List all indexable file paths using the Git Trees API (single API call)."""
     try:
-        contents = await github_service.get_repo_contents(access_token, owner, repo_name, path)
-        for item in contents:
-            if item.get("type") == "dir":
-                child_paths = await _traverse_repo(access_token, owner, repo_name, item["path"])
-                file_paths.extend(child_paths)
-            elif item.get("type") == "file" and _should_index(item.get("name", "")):
-                file_paths.append(item["path"])
+        tree = await github_service.get_repo_tree(access_token, owner, repo_name, branch)
+        return [item["path"] for item in tree if _should_index(item.get("path", ""))]
     except Exception as exc:
-        logger.warning("Error traversing %s/%s at %s: %s", owner, repo_name, path, exc)
-    return file_paths
+        logger.warning("Error fetching tree for %s/%s: %s", owner, repo_name, exc)
+        return []
 
 
 async def index_repository(repo_id: str, access_token: str) -> None:
@@ -191,11 +185,10 @@ async def index_repository(repo_id: str, access_token: str) -> None:
                     total_chunks += len(chunks)
                     files_processed += 1
 
-                    # Periodic progress update
-                    if files_processed % 10 == 0:
-                        repo.files_processed = files_processed
-                        repo.chunk_count = total_chunks
-                        await db.commit()
+                    # Update progress after every file
+                    repo.files_processed = files_processed
+                    repo.chunk_count = total_chunks
+                    await db.commit()
 
                 except Exception as exc:
                     logger.warning("Error processing file %s: %s", fp, exc)

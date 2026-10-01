@@ -110,6 +110,23 @@ async def get_file_content(access_token: str, owner: str, repo: str, path: str) 
         return resp.text
 
 
+async def get_repo_tree(
+    access_token: str, owner: str, repo: str, branch: str = "HEAD"
+) -> list[dict[str, Any]]:
+    """Fetch the entire repo file tree in a single API call using Git Trees API."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1",
+            headers=_auth_headers(access_token),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return [
+            item for item in data.get("tree", [])
+            if item.get("type") == "blob"  # files only, skip dirs
+        ]
+
+
 def _auth_headers(access_token: str) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {access_token}",
