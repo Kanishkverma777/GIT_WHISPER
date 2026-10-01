@@ -45,8 +45,8 @@ def _get_qdrant() -> QdrantClient:
 def _get_embedder() -> TextEmbedding:
     global _embedder
     if _embedder is None:
-        logger.info("Loading fastembed default model (BAAI/bge-small-en-v1.5) …")
-        _embedder = TextEmbedding()
+        logger.info("Loading fastembed micro model (TaylorAI/bge-micro-v2) …")
+        _embedder = TextEmbedding(model_name="TaylorAI/bge-micro-v2", threads=1)
     return _embedder
 
 
