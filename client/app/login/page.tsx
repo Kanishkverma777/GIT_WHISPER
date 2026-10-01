@@ -29,8 +29,10 @@ function LoginLoading(){
     )
 }
 
+import ModernLoginSignup from "@/components/ui/modern-login-signup";
+
 const LoginContent = () => {
-     const params = useSearchParams();
+  const params = useSearchParams();
   const router = useRouter();
   const error = params.get("error");
   const next = params.get("next") || "/dashboard";
@@ -42,55 +44,20 @@ const LoginContent = () => {
     }
   }, [user, isLoading, next, router]);
 
-
   return (
-   <div className="relative flex min-h-svh flex-col overflow-hidden bg-background">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(from_var(--primary)_l_c_h/0.1),transparent_55%)]" />
-
-      <header className="relative z-10 flex h-14 items-center justify-between px-4">
-        <Link href="/">
-          <BrandMark />
-        </Link>
-      </header>
-
-      <main className="relative z-10 flex flex-1 items-center justify-center px-4 py-10">
-        <Card className="w-full max-w-sm border-border/70 bg-card/90 shadow-lg shadow-foreground/5 backdrop-blur-xl">
-          <CardHeader className="space-y-4 text-center">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-foreground text-background">
-              <GitHubIcon className="size-6" />
-            </div>
-            <div className="space-y-1">
-              <CardTitle className="text-xl">Sign in</CardTitle>
-              <CardDescription>
-                Connect GitHub to chat with your repositories.
-              </CardDescription>
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle />
-                <AlertTitle>Sign-in failed</AlertTitle>
-                <AlertDescription>Please try again.</AlertDescription>
-              </Alert>
-            )}
-
-            <a
-              href={getGithubLoginUrl()}
-              className={cn(
-                buttonVariants({ size: "lg" }),
-                "inline-flex w-full items-center justify-center gap-2 bg-foreground text-background hover:bg-foreground/90"
-              )}
-            >
-              <GitHubIcon className="size-5" />
-              Continue with GitHub
-            </a>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
-  )
+    <>
+      {error && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4">
+          <Alert variant="destructive" className="bg-red-950/90 border-red-900 text-white backdrop-blur-md">
+            <AlertCircle className="text-red-400" />
+            <AlertTitle>Sign-in failed</AlertTitle>
+            <AlertDescription>Please try again.</AlertDescription>
+          </Alert>
+        </div>
+      )}
+      <ModernLoginSignup />
+    </>
+  );
 }
 
 export default function LoginPage() {
