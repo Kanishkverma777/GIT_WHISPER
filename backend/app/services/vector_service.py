@@ -20,7 +20,7 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
-from sentence_transformers import SentenceTransformer
+from fastembed.embedding import TextEmbedding
 
 from app.config import settings
 
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # ── Singletons (initialised lazily) ──────────────────────────────────────────
 
 _qdrant: QdrantClient | None = None
-_embedder: SentenceTransformer | None = None
+_embedder: TextEmbedding | None = None
 
 
 def _get_qdrant() -> QdrantClient:
@@ -42,11 +42,15 @@ def _get_qdrant() -> QdrantClient:
     return _qdrant
 
 
-def _get_embedder() -> SentenceTransformer:
+def _get_embedder() -> TextEmbedding:
     global _embedder
     if _embedder is None:
-        logger.info("Loading sentence-transformers model: %s …", settings.embedding_model)
-        _embedder = SentenceTransformer(settings.embedding_model)
+        logger.info("Loading fastembed model: %s …", settings.embedding_model)
+        # We prepend 'sentence-transformers/' in case the user just used 'all-MiniLM-L6-v2'
+        model_name = settings.embedding_model
+        if not model_name.startswith("sentence-transformers/") and "MiniLM" in model_name:
+            model_name = f"sentence-transformers/{model_name}"
+        _embedder = TextEmbedding(model_name=model_name)
     return _embedder
 
 
@@ -88,7 +92,7 @@ async def get_embedding(text: str) -> list[float]:
     model = _get_embedder()
 
     def _embed() -> list[float]:
-        vector = model.encode(text, normalize_embeddings=True)
+        vector = list(model.embed([text]))[0]
         return vector.tolist()
 
     return await asyncio.to_thread(_embed)
@@ -99,7 +103,7 @@ async def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
     model = _get_embedder()
 
     def _embed_batch() -> list[list[float]]:
-        vectors = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+        vectors = list(model.embed(texts))
         return [v.tolist() for v in vectors]
 
     return await asyncio.to_thread(_embed_batch)
