@@ -17,13 +17,8 @@ def get_authorize_url() -> str:
     """Build the GitHub OAuth authorize redirect URL."""
     params = {
         "client_id": settings.github_client_id,
-        "redirect_uri": f"{settings.frontend_url.rstrip('/')}/api/auth/github/callback"
-        if settings.frontend_url.startswith("http://localhost")
-        else f"http://localhost:{settings.port}/api/auth/github/callback",
         "scope": "user:email repo",
     }
-    # Always redirect to the backend callback
-    params["redirect_uri"] = f"http://localhost:{settings.port}/api/auth/github/callback"
     qs = "&".join(f"{k}={v}" for k, v in params.items())
     return f"{GITHUB_OAUTH_URL}?{qs}"
 
