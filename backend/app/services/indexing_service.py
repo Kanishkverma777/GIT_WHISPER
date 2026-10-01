@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
+import zipfile
 from datetime import datetime, timezone
 
 from sqlalchemy import update
@@ -110,57 +112,7 @@ def chunk_code(
     return chunks
 
 
-# ── Repo traversal & indexing ─────────────────────────────────────────────────
 
-
-async def _traverse_repo(
-    access_token: str, owner: str, repo_name: str, branch: str = "HEAD"
-) -> list[str]:
-    """List all indexable file paths using the Git Trees API (single API call)."""
-    try:
-        tree = await github_service.get_repo_tree(access_token, owner, repo_name, branch)
-        return [item["path"] for item in tree if _should_index(item.get("path", ""))]
-    except Exception as exc:
-        logger.warning("Error fetching tree for %s/%s: %s", owner, repo_name, exc)
-        return []
-
-# Mutable counter to pass chunk count back from _process_single_file
-_last_chunk_count = 0
-
-
-async def _process_single_file(
-    access_token: str, owner: str, repo_name: str, fp: str, repo_id: str,
-) -> None:
-    """Download, chunk, embed, and upsert a single file."""
-    global _last_chunk_count
-    _last_chunk_count = 0
-
-    content = await github_service.get_file_content(access_token, owner, repo_name, fp)
-    if not content or not content.strip():
-        return
-
-    if len(content) > 100000:
-        logger.warning("Skipping %s because it is too large (>100KB)", fp)
-        return
-
-    chunks = chunk_code(content, fp)
-    chunk_texts = [c["content"] for c in chunks]
-    embeddings = await vector_service.get_embeddings_batch(chunk_texts)
-
-    batch: list[tuple[list[float], dict]] = []
-    for chunk, embedding in zip(chunks, embeddings):
-        payload = {
-            "repository_id": repo_id,
-            "file_path": chunk["file_path"],
-            "content": chunk["content"],
-            "start_line": chunk["start_line"],
-            "end_line": chunk["end_line"],
-            "language": chunk["language"],
-        }
-        batch.append((embedding, payload))
-
-    await vector_service.upsert_points_batch(batch)
-    _last_chunk_count = len(chunks)
 
 
 async def index_repository(repo_id: str, access_token: str) -> None:
@@ -184,35 +136,72 @@ async def index_repository(repo_id: str, access_token: str) -> None:
             # Delete old vectors for this repo (supports re-indexing)
             await vector_service.delete_by_repository(repo_id)
 
-            # Traverse the repo tree
-            file_paths = await _traverse_repo(access_token, repo.owner, repo.name)
-            repo.files_total = len(file_paths)
-            await db.commit()
+            # Download the repo as a single zip file
+            zip_bytes = await github_service.download_repo_zip(access_token, repo.owner, repo.name)
+            
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                all_files = zf.namelist()
+                file_paths = []
+                for fp in all_files:
+                    if not zf.getinfo(fp).is_dir():
+                        # Strip top-level dir (e.g. owner-repo-sha123/)
+                        parts = fp.split('/', 1)
+                        relative_path = parts[1] if len(parts) > 1 else fp
+                        if _should_index(relative_path):
+                            file_paths.append((fp, relative_path))
+                
+                repo.files_total = len(file_paths)
+                await db.commit()
 
-            files_processed = 0
-            total_chunks = 0
+                files_processed = 0
+                total_chunks = 0
 
-            for fp in file_paths:
-                try:
-                    await asyncio.wait_for(
-                        _process_single_file(
-                            access_token, repo.owner, repo.name, fp,
-                            repo_id,
-                        ),
-                        timeout=60,
-                    )
-                    files_processed += 1
-                    total_chunks += _last_chunk_count
+                for fp, relative_path in file_paths:
+                    try:
+                        content_bytes = zf.read(fp)
+                        try:
+                            content = content_bytes.decode('utf-8')
+                        except UnicodeDecodeError:
+                            logger.warning("Skipping %s due to decode error", relative_path)
+                            continue
 
-                    # Update progress after every file
-                    repo.files_processed = files_processed
-                    repo.chunk_count = total_chunks
-                    await db.commit()
+                        if not content or not content.strip():
+                            continue
+                            
+                        if len(content) > 100000:
+                            logger.warning("Skipping %s because it is too large (>100KB)", relative_path)
+                            continue
 
-                except asyncio.TimeoutError:
-                    logger.warning("Timeout processing file %s — skipping", fp)
-                except Exception as exc:
-                    logger.warning("Error processing file %s: %s", fp, exc)
+                        chunks = chunk_code(content, relative_path)
+                        if not chunks:
+                            continue
+
+                        chunk_texts = [c["content"] for c in chunks]
+                        embeddings = await vector_service.get_embeddings_batch(chunk_texts)
+
+                        batch: list[tuple[list[float], dict]] = []
+                        for chunk, embedding in zip(chunks, embeddings):
+                            payload = {
+                                "repository_id": repo_id,
+                                "file_path": chunk["file_path"],
+                                "content": chunk["content"],
+                                "start_line": chunk["start_line"],
+                                "end_line": chunk["end_line"],
+                                "language": chunk["language"],
+                            }
+                            batch.append((embedding, payload))
+
+                        await vector_service.upsert_points_batch(batch)
+                        total_chunks += len(chunks)
+                        files_processed += 1
+
+                        # Update progress after every file
+                        repo.files_processed = files_processed
+                        repo.chunk_count = total_chunks
+                        await db.commit()
+
+                    except Exception as exc:
+                        logger.warning("Error processing file %s: %s", relative_path, exc)
 
             # Mark as READY
             repo.index_status = "READY"

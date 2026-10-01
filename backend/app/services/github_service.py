@@ -110,6 +110,19 @@ async def get_file_content(access_token: str, owner: str, repo: str, path: str) 
         return resp.text
 
 
+async def download_repo_zip(
+    access_token: str, owner: str, repo: str, branch: str = "HEAD"
+) -> bytes:
+    """Download the entire repository as a ZIP archive (single HTTP request)."""
+    async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+        resp = await client.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/zipball/{branch}",
+            headers=_auth_headers(access_token),
+        )
+        resp.raise_for_status()
+        return resp.content
+
+
 async def get_repo_tree(
     access_token: str, owner: str, repo: str, branch: str = "HEAD"
 ) -> list[dict[str, Any]]:
