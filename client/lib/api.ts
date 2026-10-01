@@ -70,6 +70,9 @@ export class ApiError extends Error {
 }
 
 export function getApiBaseUrl() {
+  // In production, we proxy /api via next.config.ts so we use relative paths.
+  // In development, we fallback to localhost if NEXT_PUBLIC_API_BASE_URL isn't set.
+  if (process.env.NODE_ENV === "production") return "";
   return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 }
 
