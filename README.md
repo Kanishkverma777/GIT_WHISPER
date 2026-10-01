@@ -2,6 +2,8 @@
 
 > An AI-powered workspace to securely chat, search, and analyze your GitHub repositories in real-time.
 
+![Git Whisper Hero](assets/hero.png)
+
 ![Git Whisper Architecture](https://img.shields.io/badge/Architecture-RAG-blue.svg)
 ![Frontend](https://img.shields.io/badge/Frontend-Next.js_16-black)
 ![Backend](https://img.shields.io/badge/Backend-FastAPI-009688)
