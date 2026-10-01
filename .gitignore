@@ -17,3 +17,5 @@ client/.env*.local
 .idea/
 *.swp
 .DS_Store
+.neon
+.env.local
