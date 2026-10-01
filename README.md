@@ -27,57 +27,63 @@ Git Whisper uses a decoupled client-server RAG architecture optimized for speed,
 ### Architecture Flowchart
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'background': 'transparent' }}}%%
 graph TD
-    %% Make all nodes transparent by default
-    classDef default fill:transparent,stroke:#888,stroke-width:2px,color:inherit;
-
-    %% Subgraph styling to remove gray backgrounds
-    style Frontend fill:transparent,stroke:#555,stroke-width:2px,stroke-dasharray: 5 5
-    style Backend fill:transparent,stroke:#555,stroke-width:2px,stroke-dasharray: 5 5
-
+    %% Base Diagram Settings
+    %%{init: {'theme': 'base', 'themeVariables': { 'fontFamily': 'monospace', 'primaryColor': '#000000', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#ff003c', 'lineColor': '#ff003c', 'secondaryColor': '#111111', 'tertiaryColor': '#111111'}}}%%
+    
     %% Users
-    User((User))
+    User((USER))
     
     %% Frontend
-    subgraph Frontend [Next.js Client]
-        UI[Dashboard UI]
-        Chat[Chat Interface]
+    subgraph Frontend [CLIENT / NEXT.JS]
+        UI[DASHBOARD UI]
+        Chat[TERMINAL CHAT]
     end
     
     %% Backend
-    subgraph Backend [FastAPI Server]
-        Auth[GitHub OAuth]
-        Zip[Zipball Downloader]
-        Filter[Filter & Chunker]
-        Embed[fastembed Local Model]
-        RAG[RAG Retrieval Engine]
+    subgraph Backend [SERVER / FASTAPI]
+        Auth[OAUTH_GATEWAY]
+        Zip[ZIP_EXTRACTOR]
+        Filter[CHUNK_ENGINE]
+        Embed[LOCAL_EMBEDDER]
+        RAG[RAG_TELEMETRY]
     end
     
     %% External Services
-    GitHub[(GitHub API)]
-    Neon[(Neon PostgreSQL)]
-    Qdrant[(Qdrant Vector DB)]
-    Groq((Groq Llama 3))
+    GitHub[(GITHUB_API)]
+    Neon[(NEON_DB)]
+    Qdrant[(QDRANT_VECTOR)]
+    Groq((GROQ_LLM))
     
     %% Flow Links
-    User -->|Login| UI
+    User -->|AUTH_REQ| UI
     UI --> Auth
-    Auth <-->|Fetch Repos| GitHub
-    Auth -->|Store Metadata| Neon
+    Auth <-->|FETCH_REPOS| GitHub
+    Auth -->|WRITE_STATE| Neon
     
-    UI -->|Trigger Indexing| Zip
-    Zip -->|Download Archive| GitHub
+    UI -->|EXEC_INDEX| Zip
+    Zip -->|PULL_ARCHIVE| GitHub
     Zip --> Filter
-    Filter -->|Batch Code Chunks| Embed
-    Embed -->|Upsert Vectors| Qdrant
+    Filter -->|BATCH_COMPUTE| Embed
+    Embed -->|UPSERT_VECTORS| Qdrant
     
-    User -->|Asks Question| Chat
+    User -->|QUERY_INPUT| Chat
     Chat --> RAG
-    RAG -->|Embed Query| Embed
-    RAG <-->|Top-K Search| Qdrant
-    RAG -->|Context + Prompt| Groq
-    Groq -.->|Stream Response| Chat
+    RAG -->|VECTORIZE| Embed
+    RAG <-->|TOP_K_MATCH| Qdrant
+    RAG -->|PROMPT_INJECT| Groq
+    Groq -.->|STREAM_OUT| Chat
+    
+    %% Brutalist Class Definitions
+    classDef client fill:#000000,stroke:#ff003c,stroke-width:2px,color:#ffffff,rx:0,ry:0;
+    classDef server fill:#111111,stroke:#ffffff,stroke-width:2px,color:#ff003c,rx:0,ry:0;
+    classDef db fill:#000000,stroke:#666666,stroke-width:2px,color:#aaaaaa,rx:0,ry:0;
+    classDef user fill:#ff003c,stroke:#000000,stroke-width:4px,color:#000000,rx:0,ry:0;
+    
+    class UI,Chat client;
+    class Auth,Zip,Filter,Embed,RAG server;
+    class Neon,Qdrant,GitHub db;
+    class User,Groq user;
 ```
 
 ---
