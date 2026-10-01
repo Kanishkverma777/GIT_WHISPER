@@ -114,8 +114,8 @@ async def github_callback(
         value=token,
         httponly=True,
         max_age=settings.jwt_expire_days * 86400,
-        samesite="lax",
-        secure=False,  # set True in production behind HTTPS
+        samesite="none",
+        secure=True,
         path="/",
     )
     return response
