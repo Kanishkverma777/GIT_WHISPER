@@ -28,6 +28,10 @@ Git Whisper uses a decoupled client-server RAG architecture optimized for speed,
 
 ```mermaid
 graph TD
+    %% Subgraph styling to remove gray backgrounds
+    style Frontend fill:transparent,stroke:#555,stroke-width:2px,color:inherit
+    style Backend fill:transparent,stroke:#555,stroke-width:2px,color:inherit
+
     %% Users
     User((User))
     
@@ -70,14 +74,6 @@ graph TD
     RAG <-->|Top-K Search| Qdrant
     RAG -->|Context + Prompt| Groq
     Groq -.->|Stream Response| Chat
-    
-    classDef client fill:#000,stroke:#333,stroke-width:2px,color:#fff;
-    classDef server fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#fff;
-    classDef db fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff;
-    
-    class UI,Chat client;
-    class Auth,Zip,Filter,Embed,RAG server;
-    class Neon,Qdrant,GitHub db;
 ```
 
 ---
