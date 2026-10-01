@@ -24,6 +24,62 @@ Git Whisper uses a decoupled client-server RAG architecture optimized for speed,
 - **Embeddings (Local AI):** `fastembed` (`sentence-transformers/all-MiniLM-L6-v2`) running completely locally on the backend to avoid 3rd-party embedding API costs.
 - **LLM Engine:** Groq API (Llama 3) for lightning-fast token generation.
 
+### Architecture Flowchart
+
+```mermaid
+graph TD
+    %% Users
+    User((User))
+    
+    %% Frontend
+    subgraph Frontend [Next.js Client]
+        UI[Dashboard UI]
+        Chat[Chat Interface]
+    end
+    
+    %% Backend
+    subgraph Backend [FastAPI Server]
+        Auth[GitHub OAuth]
+        Zip[Zipball Downloader]
+        Filter[Filter & Chunker]
+        Embed[fastembed Local Model]
+        RAG[RAG Retrieval Engine]
+    end
+    
+    %% External Services
+    GitHub[(GitHub API)]
+    Neon[(Neon PostgreSQL)]
+    Qdrant[(Qdrant Vector DB)]
+    Groq((Groq Llama 3))
+    
+    %% Flow Links
+    User -->|Login| UI
+    UI --> Auth
+    Auth <-->|Fetch Repos| GitHub
+    Auth -->|Store Metadata| Neon
+    
+    UI -->|Trigger Indexing| Zip
+    Zip -->|Download Archive| GitHub
+    Zip --> Filter
+    Filter -->|Batch Code Chunks| Embed
+    Embed -->|Upsert Vectors| Qdrant
+    
+    User -->|Asks Question| Chat
+    Chat --> RAG
+    RAG -->|Embed Query| Embed
+    RAG <-->|Top-K Search| Qdrant
+    RAG -->|Context + Prompt| Groq
+    Groq -.->|Stream Response| Chat
+    
+    classDef client fill:#000,stroke:#333,stroke-width:2px,color:#fff;
+    classDef server fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef db fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff;
+    
+    class UI,Chat client;
+    class Auth,Zip,Filter,Embed,RAG server;
+    class Neon,Qdrant,GitHub db;
+```
+
 ---
 
 ## 🔄 Core Flows
