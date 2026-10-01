@@ -27,10 +27,14 @@ Git Whisper uses a decoupled client-server RAG architecture optimized for speed,
 ### Architecture Flowchart
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'background': 'transparent' }}}%%
 graph TD
+    %% Make all nodes transparent by default
+    classDef default fill:transparent,stroke:#888,stroke-width:2px,color:inherit;
+
     %% Subgraph styling to remove gray backgrounds
-    style Frontend fill:transparent,stroke:#555,stroke-width:2px,color:inherit
-    style Backend fill:transparent,stroke:#555,stroke-width:2px,color:inherit
+    style Frontend fill:transparent,stroke:#555,stroke-width:2px,stroke-dasharray: 5 5
+    style Backend fill:transparent,stroke:#555,stroke-width:2px,stroke-dasharray: 5 5
 
     %% Users
     User((User))
