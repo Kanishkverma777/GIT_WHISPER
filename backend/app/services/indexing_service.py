@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import logging
 import zipfile
 from datetime import datetime, timezone
@@ -130,12 +129,22 @@ async def index_repository(repo_id: str, access_token: str) -> None:
     Full indexing pipeline — called as a background task.
 
     Creates its own DB session so it's independent of the request lifecycle.
+
+    Memory-optimised for Render free-tier (512 MB):
+    - ZIP is streamed to a temp file on disk (not held in RAM).
+    - Embedding batches are kept small (16 chunks).
+    - Explicit ``gc.collect()`` after each file to release intermediate buffers.
     """
+    import gc
+    import os
+
     async with async_session_factory() as db:
         repo = await db.get(Repository, repo_id)
         if repo is None:
             logger.error("Repository %s not found for indexing", repo_id)
             return
+
+        zip_path: str | None = None  # track temp file for cleanup
 
         try:
             # Mark as INDEXING
@@ -146,10 +155,10 @@ async def index_repository(repo_id: str, access_token: str) -> None:
             # Delete old vectors for this repo (supports re-indexing)
             await vector_service.delete_by_repository(repo_id)
 
-            # Download the repo as a single zip file
-            zip_bytes = await github_service.download_repo_zip(access_token, repo.owner, repo.name)
-            
-            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            # Download the repo as a ZIP — streamed to a temp file on disk
+            zip_path = await github_service.download_repo_zip(access_token, repo.owner, repo.name)
+
+            with zipfile.ZipFile(zip_path) as zf:
                 all_files = zf.namelist()
                 file_paths = []
                 for fp in all_files:
@@ -159,7 +168,7 @@ async def index_repository(repo_id: str, access_token: str) -> None:
                         relative_path = parts[1] if len(parts) > 1 else fp
                         if _should_index(relative_path):
                             file_paths.append((fp, relative_path))
-                
+
                 repo.files_total = len(file_paths)
                 await db.commit()
 
@@ -174,28 +183,35 @@ async def index_repository(repo_id: str, access_token: str) -> None:
                         except UnicodeDecodeError:
                             logger.warning("Skipping %s due to decode error", relative_path)
                             continue
+                        finally:
+                            # Free the raw bytes immediately
+                            del content_bytes
 
                         if not content or not content.strip():
+                            del content
                             continue
-                            
+
                         if len(content) > 100000:
                             logger.warning("Skipping %s because it is too large (>100KB)", relative_path)
+                            del content
                             continue
 
                         chunks = chunk_code(content, relative_path)
+                        del content  # free source text — chunks hold their own slices
+
                         if not chunks:
                             continue
 
                         chunk_texts = [c["content"] for c in chunks]
-                        
-                        # Process embeddings in batches of 32 to prevent OOM
-                        BATCH_SIZE = 32
+
+                        # Process embeddings in batches of 16 to prevent OOM
+                        BATCH_SIZE = 16
                         for i in range(0, len(chunks), BATCH_SIZE):
                             batch_chunks = chunks[i:i + BATCH_SIZE]
                             batch_texts = chunk_texts[i:i + BATCH_SIZE]
-                            
+
                             batch_embeddings = await vector_service.get_embeddings_batch(batch_texts)
-                            
+
                             payload_batch: list[tuple[list[float], dict]] = []
                             for chunk, embedding in zip(batch_chunks, batch_embeddings):
                                 payload = {
@@ -209,13 +225,19 @@ async def index_repository(repo_id: str, access_token: str) -> None:
                                 payload_batch.append((embedding, payload))
 
                             await vector_service.upsert_points_batch(payload_batch)
+                            del batch_embeddings, payload_batch  # release ASAP
+
                         total_chunks += len(chunks)
                         files_processed += 1
+                        del chunks, chunk_texts
 
                         # Update progress after every file
                         repo.files_processed = files_processed
                         repo.chunk_count = total_chunks
                         await db.commit()
+
+                        # Force GC to reclaim memory between files
+                        gc.collect()
 
                     except Exception as exc:
                         logger.warning("Error processing file %s: %s", relative_path, exc)
@@ -237,3 +259,13 @@ async def index_repository(repo_id: str, access_token: str) -> None:
             repo.index_status = "FAILED"
             repo.error_message = str(exc)
             await db.commit()
+
+        finally:
+            # Always clean up the temp ZIP file
+            if zip_path is not None:
+                try:
+                    os.unlink(zip_path)
+                except OSError:
+                    pass
+            gc.collect()
+

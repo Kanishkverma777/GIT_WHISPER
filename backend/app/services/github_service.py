@@ -112,15 +112,33 @@ async def get_file_content(access_token: str, owner: str, repo: str, path: str) 
 
 async def download_repo_zip(
     access_token: str, owner: str, repo: str, branch: str = "HEAD"
-) -> bytes:
-    """Download the entire repository as a ZIP archive (single HTTP request)."""
-    async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
-        resp = await client.get(
-            f"{GITHUB_API}/repos/{owner}/{repo}/zipball/{branch}",
-            headers=_auth_headers(access_token),
-        )
-        resp.raise_for_status()
-        return resp.content
+) -> str:
+    """Download the repository as a ZIP archive, streaming to a temp file.
+
+    Returns the path to the temporary file (caller must delete it when done).
+    Streaming avoids holding the entire ZIP in memory — critical for staying
+    within Render's 512 MB RAM limit.
+    """
+    import tempfile
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    try:
+        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+            async with client.stream(
+                "GET",
+                f"{GITHUB_API}/repos/{owner}/{repo}/zipball/{branch}",
+                headers=_auth_headers(access_token),
+            ) as resp:
+                resp.raise_for_status()
+                async for chunk in resp.aiter_bytes(chunk_size=65_536):
+                    tmp.write(chunk)
+        tmp.close()
+        return tmp.name
+    except Exception:
+        tmp.close()
+        import os
+        os.unlink(tmp.name)
+        raise
 
 
 async def get_repo_tree(
